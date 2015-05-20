@@ -87,13 +87,13 @@ void FMReceiver::set2WireMode()
 {
     // GPIO23 on RPI -> RST on SI4703
     // Set up GPIO 23 and set to output
-    system("echo \"23\" > /sys/class/gpio/export");
-    system("echo \"out\" > /sys/class/gpio/gpio23/direction");
+    system("echo \"4\" > /sys/class/gpio/export");
+    system("echo \"out\" > /sys/class/gpio/gpio4/direction");
 
     // Write output
-    system("echo \"0\" > /sys/class/gpio/gpio23/value");
+    system("echo \"0\" > /sys/class/gpio/gpio4/value");
     QTest::qSleep(100);
-    system("echo \"1\" > /sys/class/gpio/gpio23/value");
+    system("echo \"1\" > /sys/class/gpio/gpio4/value");
     QTest::qSleep(100);
 }
 
@@ -143,42 +143,49 @@ int FMReceiver::readChannel()
 #endif
 
     channel += 875; //98 + 875 = 973
-    return(channel);
+    return (channel);
 }
 
-void FMReceiver::checkRDS()
+void FMReceiver::readRds(int timeout)
 {
-    qDebug() << "\nCheck RDS";
-    for (int i = 0; i < 200; i++) {
-        readRegisters();
-        if (si4703_registers[STATUSRSSI] & (1 << RDSR)) {
-            const uint8_t blockerrors = (si4703_registers[STATUSRSSI] & 0x0600) >> 9; // Mask in BLERA
-            if (blockerrors == 1)
-                qDebug() << " (1-2 RDS errors)";
-            else if (blockerrors == 2)
-                qDebug() << " (3-5 RDS errors)";
-            else if (blockerrors == 3)
-                qDebug() << " (6+ RDS errors)";
+        QTime endTime = QTime::currentTime().addMSecs(timeout);
+        bool completed[] = {false, false, false, false};
+        int completedCount = 0;
 
-            char Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl;
-            Ah = (si4703_registers[RDSA] & 0xFF00) >> 8;
-            Al = (si4703_registers[RDSA] & 0x00FF);
+        while ( completedCount < 4 && QTime::currentTime() < endTime) {
+                readRegisters();
 
-            Bh = (si4703_registers[RDSB] & 0xFF00) >> 8;
-            Bl = (si4703_registers[RDSB] & 0x00FF);
+                if ( si4703_registers[STATUSRSSI] & (1<<RDSR) ) {
 
-            Ch = (si4703_registers[RDSC] & 0xFF00) >> 8;
-            Cl = (si4703_registers[RDSC] & 0x00FF);
+			uint16_t b = si4703_registers[RDSB];
+			uint16_t d = si4703_registers[RDSD];
 
-            Dh = (si4703_registers[RDSD] & 0xFF00) >> 8;
-            Dl = (si4703_registers[RDSD] & 0x00FF);
+			int index = b & 0x03;
 
-            qDebug() << "RDS: " << Bh << Bl << Ch << Cl << Dh << Dl;
-            QTest::qSleep(40);
-        } else {
-            QTest::qSleep(30);
+			if (!completed[index] && b < 500) {
+
+				completed[index] = true;
+				completedCount++;
+
+				char Dh = d >> 8;
+				char Dl = d & 0xFF;
+
+				rdsInfo.psName[index * 2] 	= Dh;
+				rdsInfo.psName[index * 2 + 1]	= Dl;
+			}
+
+			//qDebug() << "RDS: " << index << " : " << b << " : "  << rdsInfo.psName;
+
+                        QTest::qSleep(50); //Wait for the RDS bit to clear
+                } else {
+                        QTest::qSleep(30); //From AN230, using the polling method 40ms should be sufficient amount of time between checks
+                }
         }
-    }
+	if (QTime::currentTime() >= endTime) {
+		rdsInfo.psName[0]='\0';
+		return;
+	}
+	rdsInfo.psName[8]='\0';
 }
 
 void FMReceiver::readRegisters()
@@ -297,6 +304,11 @@ bool FMReceiver::seek(int seekDirection)
     }
 
     qDebug() << "Channel set to " << readChannel();
+
+    memset(rdsInfo.psName, 0, sizeof rdsInfo.psName);
+    readRds(5000);
+    qDebug() << "Station: " << rdsInfo.psName;
+
     return(SUCCESS);
 }
 
@@ -348,5 +360,10 @@ void FMReceiver::goToChannel(const unsigned int value)
     }
 
     qDebug() << "Station set to " << readChannel();
+
+    memset(rdsInfo.psName, 0, sizeof rdsInfo.psName);
+    readRds(5000);
+    qDebug() << "Station: " << rdsInfo.psName;
+    // QString((char*)(text))
 }
 

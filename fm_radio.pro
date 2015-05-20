@@ -5,7 +5,7 @@
 #-------------------------------------------------
 
 QT       += core testlib
-CONFIG += c++11
+CONFIG += c++11 
 QT       -= gui
 
 TARGET = fm_radio

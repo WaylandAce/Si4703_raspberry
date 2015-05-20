@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <I2Cdev.h>
+#include <QTime>
 
 class FMReceiver
 {
@@ -13,8 +14,8 @@ public:
     void stop();
     void start();
     void setVolume(const uint8_t value = 10);
-    void goToChannel(const unsigned int value = 999);
-    void checkRDS();
+    void goToChannel(const unsigned int value = 892);
+    void readRds(int timeout);
     bool seek(int seekDirection);
     int readChannel();
 
@@ -29,6 +30,20 @@ private:
 private:
     uint8_t m_devAddr;
     uint16_t si4703_registers[16]; //There are 16 registers, each 16 bits large
+
+    struct {
+	uint16_t pi;
+	uint16_t programType;
+	char psName[9];
+        char radioText[64];
+	bool trafficProgram;
+	bool trafficAnnouncement;
+	bool isMusic;
+	bool isStereo;
+	bool isArtificialHead;
+	bool isCompressed;
+	bool isDynamicProgramType;
+    } rdsInfo;
 };
 
 #endif // FMRECEIVER_H
